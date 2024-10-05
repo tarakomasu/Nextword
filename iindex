@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="black">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <title>integrate</title>
+</head>
+<body>
+    <div id="tab" style="visibility: hidden;"></div>
+    <textarea id="textarea">
+        モバイルデバでキーボードを出現させた時、その上にボタンが付いてきます。
+        ズーム倍率を変更しても同じ大きさになります。
+    </textarea>
+        
+        <!-- バーチャルキーボードの上に表示させる絵文字ボタン -->
+        <div id="pullet">
+            <div id="button_container">
+                <input type="text" class="buttons" id="close_key">
+                <input type="text" class="buttons" id="iframe_add">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+                <img src="upload.jpg" class="buttons">
+            </div>
+            <div id="iframe_resize_cover">
+                <div id="iframe_resize_box">
+                    <div class="resize-handle bottom" id="handle"></div>
+                  </div>
+                  <div id="iframe_set">
+                    <div id="guidance" style="grid-area: guide; height: 50%;">
+                        <br>
+                        この領域にpdfファイルや対応の別のWEBサイトなど編集しながら見たい要素を追加できます。<br>
+                        上端をドラッグして表示領域を拡大、縮小できます。<br>
+                        WEBサイトの場合は左にURLを入力してください。
+                    </div>
+                    <div id="add_url" style="grid-area: url;">
+                        <input type="url" id="input_url" style="margin-left: 0.5vw; margin-bottom: 1vw; height: 30%;" placeholder="https://…"><br>
+                        <button id="button_url" style="width: 90%; height: 50%;">WEBサイトを追加</button>
+                    </div>
+                    <input type="file" id="add_files" accept=".pdf" style="grid-area: others;">
+                  </div>
+                  <div id="iframe_container">
+                  </div>
+            </div>
+        </div>
+<style>
+    #tab{
+        position: fixed;
+        width: 100%;
+        height: 2vh;
+        background-color: aqua;
+        z-index: 10;
+        top: -10px;
+    }
+    textarea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        border: none;
+        resize: none;
+        outline: none;
+        height: 4000px;
+    }
+
+    /* 絵文字ボタンのラッパー */
+    #pullet {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #f0f0f0;
+        transform-origin: left bottom;
+    }
+    #button_container{
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    .buttons {
+        background-color: aqua;
+        border: 1px solid black;
+        flex: none;
+        height: 9vh;
+        width: 90px;
+        background-size: 90px 9vh;
+        caret-color: transparent;  /* カーソルを非表示に */
+        resize: none; 
+    }
+
+    .buttons:focus {
+        outline: none;
+    }
+
+    #close_key{
+        background-image: url(close_keyboard.png);
+    }
+
+    #iframe_add{
+        background-image: url(upload.jpg);
+    }
+
+
+    #iframe_resize_cover{
+        width: 100vw;
+        height: 60vh;
+        visibility: hidden;
+        position: absolute;
+        top: -60vh;
+        
+    }
+
+    #iframe_resize_box{
+        width: 100vw;
+        height: 30vh;
+        background-color: aqua;
+        visibility: hidden;
+    }
+
+    .resize-handle {
+        position: absolute;
+        background-color: gray;
+        visibility: hidden;
+        z-index: 10;
+    }
+      
+    .resize-handle.bottom {
+        height: 10px;
+        width: 100%;
+        cursor: ns-resize;
+        top: 30vh;
+    }
+
+    #iframe_container{
+        height: 30vh;
+        width: 100vw;
+        visibility: hidden;
+        margin-top: 0vh;
+        overflow-y: auto;
+    }
+
+    #iframe_set{
+        height: 30vh;
+        width: 100vw;
+        visibility: hidden;
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+            "guide guide"
+            "url others";
+        position: absolute;
+        background-color: antiquewhite;
+        margin-top: 0vh;
+    }
+    #source{
+        width: 100%;
+        height: 100%;
+    }
+</style>
+
+<script>
+    /*window.addEventListener('beforeunload', function (e) {
+        // カスタムメッセージを表示するにはこのように設定する
+        e.preventDefault();
+        e.returnValue = '';  // 古いブラウザ向け
+    });*/
+
+    //resize用
+    const handle = document.getElementById('handle')
+    const cover = document.getElementById('iframe_resize_cover')
+    const box = document.getElementById('iframe_resize_box')
+    const container = document.getElementById('iframe_container')
+    const set = document.getElementById('iframe_set')
+    const cover_rect = cover.getBoundingClientRect()
+    const thirty = window.innerHeight * 0.3
+    let isResizing = false;
+    let currentHandle = null;
+    console.log(box.style.height)
+    // 共通の関数
+    const startResizing = (handle) => {
+      isResizing = true;
+      currentHandle = handle.classList.contains('top') ? 'top' :
+                      handle.classList.contains('right') ? 'right' :
+                      handle.classList.contains('bottom') ? 'bottom' : 'left';
+  
+      // スクロールを無効化
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('wheel', preventScroll, { passive: false });
+      document.addEventListener('touchmove', preventScroll, { passive: false });
+    };
+  
+    const resize = (clientX, clientY) => {
+      if (!isResizing) return;
+  
+      const rect = box.getBoundingClientRect();
+      if (clientY - rect.top > 140 && cover_rect.bottom - cover_rect.top -(clientY - rect.top) > 60) {
+        box.style.height = clientY - rect.top + 'px';
+        handle.style.top = clientY - rect.top + 'px';
+        container.style.height = cover_rect.bottom - cover_rect.top -(clientY - rect.top) + 'px'
+        set.style.height = cover_rect.bottom - cover_rect.top -(clientY - rect.top) + 'px'
+    };
+    }
+    const stopResizing = () => {
+      isResizing = false;
+  
+      // スクロールを有効化
+      document.body.style.overflow = '';
+      document.removeEventListener('wheel', preventScroll);
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  
+    const preventScroll = (e) => {
+      e.preventDefault();  // スクロールイベントを防ぐ
+    };
+  
+    // マウスイベント用の処理
+    document.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('mousedown', (e) => {
+        startResizing(handle);
+      });
+    });
+  
+    document.addEventListener('mousemove', (e) => {
+      resize(e.clientX, e.clientY);
+    });
+  
+    document.addEventListener('mouseup', stopResizing);
+  
+    // タッチイベント用の処理
+    document.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('touchstart', (e) => {
+        startResizing(handle);
+        document.getElementById('guidance').innerHTML = ""
+      });
+    });
+  
+    document.addEventListener('touchmove', (e) => {
+      const touch = e.touches[0];
+      resize(touch.clientX, touch.clientY);
+    });
+  
+    document.addEventListener('touchend', stopResizing);
+  </script>
+
+
+
+<script>
+    let iframe_number = 0
+    function isValidUrl(urlString) {
+        try {
+            new URL(urlString);
+            return true;
+        } catch (e) {
+            return false;
+        }
+        }
+    const buttons = document.getElementById('pullet')
+    const textarea = document.getElementById('textarea')
+    const client_viewport = document.documentElement.clientHeight
+
+
+    document.getElementById('close_key').addEventListener('click', () => {
+        document.getElementById('close_key').blur()
+    })
+
+    document.getElementById('iframe_add').addEventListener('click', () => {
+        document.getElementById('iframe_set').style.visibility = 'visible'
+        document.getElementById('handle').style.visibility = 'visible'
+        textarea.focus()
+    })
+
+    document.getElementById('button_url').addEventListener('click', () => {
+        document.getElementById('iframe_container').style.visibility = 'visible'
+        const URL = document.getElementById('input_url').value
+        if(isValidUrl(URL)){
+            document.getElementById('iframe_set').style.visibility = 'hidden'
+            iframe_number++
+            const new_iframe = document.createElement('iframe')
+            new_iframe.src = URL
+            new_iframe.style.width = '100vw'
+            new_iframe.style.height = '100%'
+            new_iframe.className = 'iframe'
+            container.appendChild(new_iframe)
+            const iframes = document.querySelectorAll('.iframe')
+            iframes.style.width = 80/iframe_number + 'vw'
+        }
+        else{
+            alert('無効なURLです')
+        }
+    })
+
+
+
+    // 入力エリアにフォーカスされたら絵文字ボタンを表示
+    textarea.addEventListener('focus', () => {
+        buttons.style.display = 'flex'
+    })
+
+    // 入力エリアのフォーカスが外れたら絵文字ボタンを非表示
+
+    window.visualViewport.addEventListener('scroll', viewportHandler)
+    window.visualViewport.addEventListener('resize', viewportHandler)
+
+    // Visual Viewport の下端がどれだけ Layout Viewport からズレているかを計算し、
+    // 絵文字ボタンをそれと同じだけずらす
+    function viewportHandler() {
+        const visualViewport = window.visualViewport
+
+        const offsetLeft = visualViewport.offsetLeft
+
+        // documentElement.clientHeight は Layout Viewport の高さとなる
+        const offsetTop =
+            visualViewport.offsetTop +
+            visualViewport.height -
+            client_viewport
+
+        // 絵文字ボタンを Visual Viewport の下端に合わせる
+        const translate = `translate(${offsetLeft}px, ${offsetTop}px)`
+
+        // 絵文字ボタンの大きさを常に同じにするため、現在の拡大率で割る
+        const scale = `scale(${1 / visualViewport.scale})`
+
+        buttons.style.transform = `${translate} ${scale}`
+    }
+</script>
+
+<script>
+    document.getElementById('add_files').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file.type === 'application/pdf') {
+        const fileReader = new FileReader();
+        fileReader.onload = function() {
+          const typedarray = new Uint8Array(this.result);
+          
+          // PDFファイルを読み込み
+          pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+            const pdfContainer = document.getElementById('iframe_container');
+            pdfContainer.innerHTML = '';  // 既存のコンテンツをクリア
+            document.getElementById('iframe_set').style.visibility = 'hidden'
+            document.getElementById('iframe_container').style.visibility = 'visible'
+            // 全ページをSVGとして描画
+            for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+              pdf.getPage(pageNumber).then(function(page) {
+                const viewport = page.getViewport({ scale: 1 });
+  
+                // SVGに描画
+                page.getOperatorList().then(function(opList) {
+                  const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+                  svgGfx.getSVG(opList, viewport).then(function(svg) {
+                    // SVGの幅を100vwに、アスペクト比を維持
+                    svg.style.width = '98vw';
+                    svg.style.height = `${(viewport.height / viewport.width) * 100}vw`;
+  
+                    // SVGをPDFコンテナに追加
+                    pdfContainer.appendChild(svg);
+                  });
+                });
+              });
+            }
+          });
+        };
+        fileReader.readAsArrayBuffer(file);
+      } else {
+        alert('PDFファイルを選択してください。');
+      }
+    });
+  </script>
+
+</body>
+</html>
